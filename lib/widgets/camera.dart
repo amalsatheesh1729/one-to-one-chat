@@ -1,0 +1,151 @@
+
+import 'dart:async';
+import 'dart:io';
+
+import 'package:camera/camera.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:learn_stuff/backend/firebase.dart';
+import 'package:learn_stuff/screens/chatmessages.dart';
+import 'package:learn_stuff/screens/chatmessages.dart';
+import 'package:learn_stuff/main.dart' as mainpg;
+
+// A screen that allows users to take a picture using a given camera.
+class TakePictureScreen extends StatefulWidget {
+  const TakePictureScreen({
+    Key? key,
+    required this.camera,
+    required this.recid,
+    required this.recname
+  }) : super(key: key);
+
+  final CameraDescription camera;
+  final String recid;
+  final String recname;
+
+  @override
+  TakePictureScreenState createState() => TakePictureScreenState();
+}
+
+class TakePictureScreenState extends State<TakePictureScreen> {
+  late CameraController _controller;
+  late Future<void> _initializeControllerFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // To display the current output from the Camera,
+    // create a CameraController.
+    _controller = CameraController(
+      // Get a specific camera from the list of available cameras.
+      widget.camera,
+      // Define the resolution to use.
+      ResolutionPreset.medium,
+    );
+
+    // Next, initialize the controller. This returns a Future.
+    _initializeControllerFuture = _controller.initialize();
+  }
+
+  @override
+  void dispose() {
+    // Dispose of the controller when the widget is disposed.
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Take a picture')),
+      // You must wait until the controller is initialized before displaying the
+      // camera preview. Use a FutureBuilder to display a loading spinner until the
+      // controller has finished initializing.
+      body: Column(
+        children: [
+          FutureBuilder<void>(
+            future: _initializeControllerFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.done) {
+                // If the Future is complete, display the preview.
+                return CameraPreview(_controller);
+              } else {
+                // Otherwise, display a loading indicator.
+                return const Center(child: CircularProgressIndicator());
+              }
+            },
+          ),
+              IconButton(onPressed: (){
+                Navigator.push(context, MaterialPageRoute(builder: (context)
+                {
+                  return TakePictureScreen(camera: mainpg.front!,recid: widget.recid,recname: widget.recname,);
+                }));
+              }, icon: Icon(Icons.flip_camera_android)),
+              IconButton(onPressed: () async{
+                try {
+                  // Ensure that the camera is initialized.
+                  await _initializeControllerFuture;
+
+                  // Attempt to take a picture and get the file `image`
+                  // where it was saved.
+                  final image = await _controller.takePicture();
+
+                  // If the picture was taken, display it on a new screen.
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => DisplayPictureScreen(
+                        // Pass the automatically generated path to
+                        // the DisplayPictureScreen widget.
+                        imagePath: image.path,
+                        recid:widget.recid,
+                        recname: widget.recname,
+                      ),
+                    ),
+                  );
+                } catch (e) {
+                  // If an error occurs, log the error to the console.
+                  print(e);
+                }
+              }, icon:Icon(Icons.camera_alt))
+        ],
+      )
+      );
+  }
+}
+
+// A widget that displays the picture taken by the user.
+class DisplayPictureScreen extends StatelessWidget {
+  final String imagePath;
+  final String recid;
+  final String recname;
+
+  const DisplayPictureScreen({Key? key,
+    required this.imagePath,
+    required this.recid,
+    required this.recname
+  })
+      : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Display the Picture')),
+      // The image is stored as a file on the device. Use the `Image.file`
+      // constructor with the given path to display the image.
+      body: Column(
+        children: [
+          Image.file(File(imagePath)),
+          TextButton(onPressed: () async {
+             String url= await FirebaseClass().uploadimage(await File(imagePath).readAsBytes());
+              await FirebaseClass().addmessagetobackend(FirebaseAuth.instance.currentUser!.uid,recid,url);
+              Navigator.push(context, MaterialPageRoute(builder: (context)
+              {
+                return ChatMessages(recid: recid, recname: recname);
+
+              }));
+          }, child: Text('Add photo to chat'))
+        ],
+      ),
+    );
+  }
+}
